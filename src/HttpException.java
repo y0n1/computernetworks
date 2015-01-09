@@ -2,11 +2,15 @@
  * Created by Yoni on 31/12/2014.
  */
 public abstract class HttpException extends Throwable {
-
     private static final String CRLF = "\r\n";
+    private String msg;
 
     public HttpException(EStatusCodes statusCodeEnum) {
         super(statusCodeEnum.toString());
+    }
+
+    public HttpException(String msg) {
+        this.msg = msg;
     }
 
     public String getHtml() {

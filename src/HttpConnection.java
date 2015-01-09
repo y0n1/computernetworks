@@ -23,35 +23,43 @@ public class HttpConnection implements Runnable {
         DataInputStream is;
         DataOutputStream os;
         try {
-            // Get a reference to the socket's input and output streams.
-            is = new DataInputStream(socket.getInputStream());
-            os = new DataOutputStream(socket.getOutputStream());
+            do {
+                try {
+                    // Get a reference to the socket's input and output streams.
+                    is = new DataInputStream(socket.getInputStream());
+                    os = new DataOutputStream(socket.getOutputStream());
 
-            // Prepare the request.
-            HttpRequest req = new HttpRequest();
-            req.readFrom(is);
+                    // Prepare the request.
+                    HttpRequest req = new HttpRequest();
+                    req.readFrom(is);
+                    System.out.print(req.getDebugInfo(req.getClass(), req.getRequestLine(), req.getHeaders(), req.getBody()));
 
-            System.out.print(req.getDebugInfo(className, req.getRequestLine(), req.getBody(), req.getHeaders()));
+                    // Prepare the response.
+                    HttpResponse res = new HttpResponse(req, serverRootFolder, serverDefaultPage);
+                    res.writeTo(os);
+                    System.out.print(res.getDebugInfo(res.getClass(), res.getStatusLine(), res.getHeaders(), res.getBody()));
 
-            // Prepare the response.
-            HttpResponse res = new HttpResponse(req, serverRootFolder, serverDefaultPage);
-            res.writeTo(os);
-            className = res.getClass().getSimpleName().substring(4);
-            System.out.print(res.getDebugInfo(className, res.getResponseLine(), res.getBody(), res.getHeaders()));
+                    try {
+                        if (req.isPersistent()) {
+                            this.socket.setKeepAlive(true);
+                        } else {
+                            this.socket.setKeepAlive(false);
+                            is.close();
+                            os.close();
+                            break;
+                        }
+                    } catch (SocketException e) {
+                        System.err.println("Unknown Socket Error: Failed to set keep alive for this socket.");
+                        break;
+                    }
 
-            try {
-                if (req.isPersistent()) {
-                    this.socket.setKeepAlive(true);
-                } else {
-                    if (is != null) is.close();
-                    if (os != null) is.close();
+                } catch (IOException exceptionFromDataInOutStream) {
+                    System.err.println(exceptionFromDataInOutStream.getMessage());
+                    break;
                 }
-            } catch (SocketException e) {
-                System.err.println("Fail to set keep alive");
-            }
-
-        } catch (IOException exceptionFromDataInOutStream) {
-            System.err.println(exceptionFromDataInOutStream.getMessage());
+            } while (this.socket.getKeepAlive());
+        } catch (SocketException e) {
+            System.err.println("Unknown Socket Error: Failed to get keep alive status for this socket.");
         }
     }
 

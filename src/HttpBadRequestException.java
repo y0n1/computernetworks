@@ -6,4 +6,8 @@ public class HttpBadRequestException extends HttpException {
     public HttpBadRequestException() {
         super(EStatusCodes.BAD_REQUEST);
     }
+
+    public HttpBadRequestException(String msg) {
+        super(msg);
+    }
 }

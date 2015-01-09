@@ -3,6 +3,8 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.HashMap;
+import java.util.SortedMap;
+import java.util.TreeMap;
 
 final class HttpRequest extends HttpMessage {
     private HashMap<String, Object> requestHeaders;
@@ -27,11 +29,15 @@ final class HttpRequest extends HttpMessage {
                 String headerLine;
                 while ((headerLine = reader.readLine()).length() != 0) {
                     String[] tokens = headerLine.split(":", 2);
-                    // Parse cookies (if any).
-                    if (tokens[0].equals("cookie")) {
-                        requestHeaders.put(tokens[0], new CookieParser(tokens[1]).table);
+                    if (tokens.length == 2) {
+                        // Parse cookies (if any).
+                        if (tokens[0].equals("cookie")) {
+                            requestHeaders.put(tokens[0], new CookieParser(tokens[1].trim()).table);
+                        } else {
+                            requestHeaders.put(tokens[0], tokens[1].trim());
+                        }
                     } else {
-                        requestHeaders.put(tokens[0], tokens[1]);
+                        throw new HttpBadRequestException("The request contains malformed headers.");
                     }
                 }
 
