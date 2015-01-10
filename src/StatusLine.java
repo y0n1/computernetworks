@@ -1,5 +1,5 @@
 /**
- * Created by Yoni on 24-Dec-14.
+ * This class represents the Status-Line of the HTTP Response.
  */
 public class StatusLine implements IHttpStartLine {
     private ProtocolVersion httpVersion;
@@ -21,7 +21,7 @@ public class StatusLine implements IHttpStartLine {
     }
 
     public StatusLine(EStatusCodes statusCodeEnum) {
-        this(WebServer.DEFAULT_HTTP_VERSION.value(), statusCodeEnum);
+        this(EHttpVersions.HTTP_1_1.value(), statusCodeEnum);
     }
 
     public ProtocolVersion getHttpVersion() {

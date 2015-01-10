@@ -2,20 +2,17 @@ import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.file.Files;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Properties;
-import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public final class WebServer {
-    public static final EHttpVersions DEFAULT_HTTP_VERSION = EHttpVersions.HTTP_1_1;
-    public static final int DEFAULT_TIMEOUT = 15 * 1000;
-    HashMap<String, HttpConnection> connectionsTable;
+    private static final WebServer INSTANCE = new WebServer();
+    int port, maxThreads;
     Properties settings;
-    int maxThreads;
-    int port;
 
-    public WebServer() {
+
+    private WebServer() {
         settings = new Properties();
 
         // Load the configuration file.
@@ -48,7 +45,6 @@ public final class WebServer {
                 }
 
                 System.out.println("The Configuration file settings were loaded successfully!");
-                connectionsTable = new HashMap<>(maxThreads);
             }
         } catch (FileNotFoundException e) {
 
@@ -74,8 +70,7 @@ public final class WebServer {
     }
 
     public static void main(String argv[]) throws Exception {
-        System.setProperty("java.net.preferIPv4Stack", "true"); // Force JVM to use the IPv4 stack only.
-        WebServer server = new WebServer();
+        WebServer server = WebServer.getInstance();
 
         // Specify the port number where the server will listen.
         int port = server.getPort();
@@ -84,58 +79,39 @@ public final class WebServer {
         int maxThreads = server.getMaxThreadsLimit();
 
         // Establish the listen socket.
-        ServerSocket socket = null;
+        ServerSocket serverSocket = null;
         try {
-            socket = new ServerSocket(port);
+            serverSocket = new ServerSocket(port);
+            System.out.printf("Listening on port: %s%n", port);
         } catch (IOException e) {
             System.err.println(e.getMessage());
             System.err.printf("Failed to bind on port %d%n", port);
             System.exit(6);
         }
 
+        ExecutorService pool = Executors.newFixedThreadPool(maxThreads);
         // Process HTTP service requests in an infinite loop.
-        int threadsInUse = 0;
         while (true) {
-            while (threadsInUse < maxThreads) {
-                // Listen for a TCP connection request.
-                Socket currentSocket = socket.accept();
-                String guest = currentSocket.getRemoteSocketAddress().toString().substring(1);
-                System.out.printf("New incoming connection from: %s%n", guest);
+            // Listen for a TCP connection request.
+            Socket socket = serverSocket.accept();
+            int guestPort = socket.getPort();
+            String guestIp = socket.getInetAddress().getHostAddress();
+            System.out.printf("New incoming connection from: %s:%s%n", guestIp, guestPort);
 
-                // Construct an object to process the HTTP request message.
-                String rootFolder = server.getRootFolder();
-                String defaultPage = server.getDefaultPage();
-                HttpConnection connection = new HttpConnection(currentSocket, defaultPage, rootFolder);
-                server.addConnection(connection);
+            // Construct an object to process the HTTP request message.
+            pool.submit(new HttpConnection(socket));
+            //HttpConnection connection = new HttpConnection(socket);
 
-                // Create a new thread to process the request.
-                Thread thread = new Thread(connection);
+            // Create a new thread to process the request.
+            //Thread thread = new Thread(connection);
 
-                // Start the thread.
-                thread.start();
-                threadsInUse++;
-            }
-            System.out.println("The Server is working at full capacity...");
-            Thread.sleep(DEFAULT_TIMEOUT);
-            for (Map.Entry<String, HttpConnection> entry : server.getConnectionsTable()) {
-                HttpConnection connection = entry.getValue();
-                if (connection.getSocket().isClosed()) {
-                    server.removeConnection(entry.getKey());
-                    threadsInUse--;
-                }
-            }
+            // Start the thread.
+            //thread.start();
         }
     }
 
-    private void removeConnection(String remoteSocketAddress) {
-        connectionsTable.remove(remoteSocketAddress);
-    }
-
-    private void addConnection(HttpConnection newHttpConnection) {
-        if (newHttpConnection != null) {
-            String socketId = newHttpConnection.getSocket().getRemoteSocketAddress().toString().substring(1);
-            connectionsTable.put(socketId, newHttpConnection);
-        }
+    public static WebServer getInstance() {
+        return INSTANCE;
     }
 
     public int getPort() {
@@ -146,11 +122,7 @@ public final class WebServer {
         return maxThreads;
     }
 
-    public Set<Map.Entry<String, HttpConnection>> getConnectionsTable() {
-        return connectionsTable.entrySet();
-    }
-
-    private String getRootFolder() {
+    public String getRootFolder() {
         String rootFolder;
         if (System.getProperty("os.name").contains("Windows")) {
             rootFolder = System.getenv("SystemDrive") + settings.getProperty("rootFolder");
@@ -161,7 +133,7 @@ public final class WebServer {
         return rootFolder;
     }
 
-    private String getDefaultPage() {
+    public String getDefaultPage() {
         return settings.getProperty("defaultPage");
     }
 }

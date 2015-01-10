@@ -1,6 +1,6 @@
-import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.Socket;
 import java.net.SocketException;
 
@@ -8,25 +8,21 @@ import java.net.SocketException;
  * Created by Yoni on 29/12/2014.
  */
 public class HttpConnection implements Runnable {
-    private final String serverRootFolder;
-    private final String serverDefaultPage;
     private Socket socket;
 
-    public HttpConnection(Socket socket, String serverDefaultPage, String serverRootFolder) {
-        this.serverDefaultPage = serverDefaultPage;
-        this.serverRootFolder = serverRootFolder;
+    public HttpConnection(Socket socket) {
         this.socket = socket;
     }
 
     @Override
     public void run() {
-        DataInputStream is;
+        InputStreamReader is;
         DataOutputStream os;
         try {
             do {
                 try {
                     // Get a reference to the socket's input and output streams.
-                    is = new DataInputStream(socket.getInputStream());
+                    is = new InputStreamReader(socket.getInputStream());
                     os = new DataOutputStream(socket.getOutputStream());
 
                     // Prepare the request.
@@ -35,7 +31,7 @@ public class HttpConnection implements Runnable {
                     System.out.print(req.getDebugInfo(req.getClass(), req.getRequestLine(), req.getHeaders(), req.getBody()));
 
                     // Prepare the response.
-                    HttpResponse res = new HttpResponse(req, serverRootFolder, serverDefaultPage);
+                    HttpResponse res = new HttpResponse(req);
                     res.writeTo(os);
                     System.out.print(res.getDebugInfo(res.getClass(), res.getStatusLine(), res.getHeaders(), res.getBody()));
 
@@ -53,17 +49,13 @@ public class HttpConnection implements Runnable {
                         break;
                     }
 
-                } catch (IOException exceptionFromDataInOutStream) {
-                    System.err.println(exceptionFromDataInOutStream.getMessage());
+                } catch (IOException exceptionFromIOStream) {
+                    System.err.println(exceptionFromIOStream.getMessage());
                     break;
                 }
             } while (this.socket.getKeepAlive());
         } catch (SocketException e) {
             System.err.println("Unknown Socket Error: Failed to get keep alive status for this socket.");
         }
-    }
-
-    public Socket getSocket() {
-        return socket;
     }
 }

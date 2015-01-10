@@ -1,3 +1,5 @@
+import java.util.HashMap;
+
 /**
  * Created by Yoni on 29/12/2014.
  */
@@ -54,8 +56,25 @@ public class RequestLine implements IHttpStartLine {
         this.requestedHttpVersion = requestedHttpVersion;
     }
 
-    public String getQueryStringParameters() {
-        return queryStringParameters;
+    public HashMap<String, String> getQueryStringParameters() {
+        if (queryStringParameters == null) return null;
+        HashMap<String, String> map = new HashMap<>();
+        String[] tokens = queryStringParameters.split("&");
+        for (String token : tokens) {
+            String[] entry = token.split("=");
+            String k = entry[0];
+            String v = entry[1];
+            map.put(k, v);
+        }
+        return map;
+    }
+
+    public void setQueryStringParameters(String queryParams) {
+        if (queryStringParameters == null) {
+            this.queryStringParameters = queryParams;
+        } else {
+            this.queryStringParameters += "&" + queryParams;
+        }
     }
 
     @Override

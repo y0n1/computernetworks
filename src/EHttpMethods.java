@@ -6,7 +6,7 @@ import java.util.Arrays;
 public enum EHttpMethods {
     GET, POST, TRACE, OPTIONS, HEAD;
 
-    public static String asListString(){
+    public static String asStringList(){
         EHttpMethods[] methodsArray = EHttpMethods.values();
         String methodsList = Arrays.toString(methodsArray);
         return methodsList.substring(1, methodsList.length() - 1);

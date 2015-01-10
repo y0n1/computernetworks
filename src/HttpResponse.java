@@ -1,32 +1,33 @@
 import java.io.*;
-import java.lang.reflect.Array;
+import java.net.URLDecoder;
 import java.nio.file.Files;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
-import java.util.Arrays;
 import java.util.Calendar;
 import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Created by Yoni on 29/12/2014.
  */
 public class HttpResponse extends HttpMessage {
     private static final String CRLF = "\r\n";
+    private final HashMap<String, Object> responseHeaders;
     private final String serverDefaultPage;
     private final String serverRootFolder;
     private final HttpRequest request;
-    private HashMap<String, Object> responseHeaders;
     private StatusLine statusLine;
     private String responseBody;
+    private File resource;
 
-    public HttpResponse(HttpRequest httpRequest, String serverRootFolder, String serverDefaultPage) {
-            this.serverDefaultPage = serverDefaultPage;
-            this.serverRootFolder = serverRootFolder;
-            this.request = httpRequest;
-            this.responseHeaders = new HashMap<>();
+    public HttpResponse(HttpRequest httpRequest) {
+        serverDefaultPage = WebServer.getInstance().getDefaultPage();
+        serverRootFolder = WebServer.getInstance().getRootFolder();
+        responseHeaders = new HashMap<>();
+        request = httpRequest;
 
         //Retrieve the date
-        DateFormat dateFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
+        DateFormat dateFormat = new SimpleDateFormat("EEE, d MMM yyyy HH:mm:ss z");
         Calendar calendar = Calendar.getInstance();
 
         // Retrieve the hostname
@@ -34,50 +35,30 @@ public class HttpResponse extends HttpMessage {
         hostname = System.getenv(hostname);
 
         // Add basic headers
-        this.responseHeaders.put("Date", dateFormat.format(calendar.getTime()));
-        this.responseHeaders.put("Server", String.format("%s, %s", hostname, System.getProperty("os.name")));
-        if (transferEncodingChunkedRequired()) {
-            this.responseHeaders.put("Transfer-Encoding", "Chunked");
-        } else {
-            this.responseHeaders.put("Content-Length", null);
-        }
+        responseHeaders.put("Date", dateFormat.format(calendar.getTime()));
+        responseHeaders.put("Server", String.format("%s/%s", hostname, System.getProperty("os.name")));
     }
 
     public void writeTo(DataOutputStream outputStream) throws IOException {
-        // TODO: Complete this method...
         try {
             // Make sure we got a good request first.
             if (request.isBadRequest()) throw new HttpBadRequestException();
 
-            // Determine which HTTP Protocol should be used...
-            this.statusLine = new StatusLine(parseHttpVersion());
+            // Parse the resource...
+            String path = request.getRequestedResource();
+            resource = parseResource(path);
 
-            // Locate the resource...
-            File requestedResourceFile = parseResourcePath(request.getRequestedResource());
-
-            // Now we can be certain that the status code is OK
-            this.statusLine.setStatusCode(EStatusCodes.OK);
+            // Setup the status-line...
+            statusLine = new StatusLine(parseHttpVersion(), EStatusCodes.OK);
+            outputStream.writeBytes(statusLine.toString() + CRLF);
 
             // Identify the HTTP method...
             switch (request.getRequestedMethod()) {
                 case GET:
-                    statusLine.setStatusCode(EStatusCodes.OK);
-                    if (transferEncodingChunkedRequired()) {
-                        // Send status line.
-                        outputStream.writeBytes(statusLine.toString());
-                        // Send response headers.
-                        writeHeaders(outputStream,responseHeaders);
-                        // Send \r\n separator
-                        outputStream.writeBytes(CRLF);
-                        // Send the resource as the body of this message
-
-
-                    } else {
-                        this.
-                    }
+                    sendGetResponse(outputStream);
                     break;
                 case POST:
-                    sendPostResponse();
+                    sendPostResponse(outputStream);
                     break;
                 case TRACE:
                     sendTraceResponse(outputStream);
@@ -86,7 +67,7 @@ public class HttpResponse extends HttpMessage {
                     sendOptionsResponse(outputStream);
                     break;
                 case HEAD:
-                    // TODO: Handle HEAD...
+                    sendHeadResponse(outputStream);
                     break;
             }
         } catch (HttpNotFoundException e) {
@@ -100,82 +81,120 @@ public class HttpResponse extends HttpMessage {
         }
     }
 
-    private void sendPostResponse() {
-        // TODO: Implement this method...
+    private void sendPostResponse(DataOutputStream outputStream) throws IOException, HttpInternalServerErrorException {
+        sendGetResponse(outputStream);
+    }
+
+    private void sendHeadResponse(DataOutputStream outputStream) throws IOException, HttpInternalServerErrorException {
+        // Set response headers.
+        responseHeaders.put("Content-Length", resource.length());
+        writeHeaders(outputStream);
+    }
+
+    private void sendGetResponse(DataOutputStream outputStream) throws IOException, HttpInternalServerErrorException {
+        if (chunkResponseRequired()) {
+            // Set response headers.
+            responseHeaders.put("Transfer-Encoding", "chunked");
+            writeHeaders(outputStream);
+            // Read chunks and send them.
+            Reader reader = (responseBody != null) ? new StringReader(responseBody) : new FileReader(resource);
+            BufferedReader bufferedReader = new BufferedReader(reader);
+            StringBuilder stringBuilder = new StringBuilder();
+            do {
+                String chunk = bufferedReader.readLine();
+                String size = Integer.toHexString(chunk.length());
+                String output = String.format("%s%s", size + CRLF, chunk + CRLF);
+                outputStream.writeBytes(output);
+                stringBuilder.append(output);
+            } while (bufferedReader.ready());
+
+            // Update the body for later use when debugging only if this body was empty.
+            if (responseBody == null) responseBody = stringBuilder.toString();
+
+        } else {
+
+            // Set response headers.
+            responseHeaders.put("Content-Length", (responseBody == null) ? resource.length() : responseBody.length());
+            writeHeaders(outputStream);
+
+            // Set response body.
+            byte[] bytes = new byte[0];
+            if (responseBody == null) {
+                bytes = readFile(resource);
+                responseBody = new String(bytes);
+            }
+
+            if (isImage()) {
+                outputStream.write(bytes);
+            } else {
+                outputStream.writeBytes(responseBody);
+            }
+            outputStream.writeBytes(CRLF);
+        }
     }
 
     private void sendOptionsResponse(DataOutputStream outputStream) throws IOException, HttpInternalServerErrorException {
-        // Update response headers.
-        responseHeaders.replace("Content-Length", String.valueOf(0));
-        responseHeaders.put("Allow", EHttpMethods.asListString());
-
-        // Write the status line.
-        statusLine.setStatusCode(EStatusCodes.OK);
-        outputStream.writeBytes(statusLine.toString() + CRLF);
-
-        // Update the length of this message.
-        writeHeaders(outputStream, responseHeaders);
-        outputStream.writeBytes(CRLF);
+        // Set response headers.
+        responseHeaders.remove("Content-Type");
+        responseHeaders.put("Content-Length", 0);
+        responseHeaders.put("Allow", EHttpMethods.asStringList());
+        writeHeaders(outputStream);
     }
 
     private void sendTraceResponse(DataOutputStream outputStream) throws IOException, HttpInternalServerErrorException {
-        // Setup the response body.
-        String requestLine = request.getRequestLine().toString();
+        // Set response body.
+        String requestLine = request.getRequestLine().toString() + CRLF;
         String requestHeaders = prettyPrintHeaders(request.getHeaders());
-        responseBody = requestLine + CRLF + requestHeaders;
+        responseBody = requestLine + requestHeaders;
 
-        // Update response headers.
+        // Set response headers.
         responseHeaders.put("Content-Type", "message/http");
+        responseHeaders.put("Content-Length", responseBody.length());
 
-        // Write the status line.
-        outputStream.writeBytes(statusLine.toString() + CRLF);
-
-        // Decide whether this response message should be returned in chunks or not.
-        if (transferEncodingChunkedRequired()) {
-            writeHeaders(outputStream, responseHeaders);
-            outputStream.writeBytes(CRLF);
-
-            // Split the body and send it in chunks.
-            String currentChunkLength = Integer.toString(responseBody.length());
-            outputStream.writeBytes(currentChunkLength + CRLF);
-            outputStream.writeBytes(responseBody + CRLF);
-        } else {
-            // Update the length of this message.
-            responseHeaders.putIfAbsent("Content-Length", Integer.toString(responseBody.length()));
-            writeHeaders(outputStream, responseHeaders);
-            outputStream.writeBytes(CRLF);
-            outputStream.writeBytes(responseBody);
-        }
-    }
-
-    private boolean transferEncodingChunkedRequired() {
-        boolean requestContainsHeaderNamedChunked = this.request.getHeaders().containsKey("chunked");
-        if (requestContainsHeaderNamedChunked) {
-            return ((String) this.request.getHeaders().get("chunked")).equalsIgnoreCase("yes");
-        } else {
-            return false;
-        }
+        // Write the response.
+        writeHeaders(outputStream);
+        outputStream.writeBytes(responseBody);
     }
 
     private void sendHttpException(DataOutputStream outputStream, EStatusCodes statusCode, HttpException e) {
-        this.statusLine = new StatusLine(statusCode);
-        this.responseBody = e.getHtml();
-        this.responseHeaders.replace("Content-Type", parseContentType(".html"));
-        this.responseHeaders.replace("Content-Length", String.valueOf(e.getHtml().length()));
+        statusLine = new StatusLine(statusCode);
+        responseHeaders.put("Content-Type", parseContentType(".html"));
+        responseHeaders.put("Content-Length", e.getHtml().length());
+        responseBody = e.getHtml();
         try {
             outputStream.writeBytes(statusLine.toString() + CRLF);
-            writeHeaders(outputStream, responseHeaders);
-            outputStream.writeBytes(CRLF);
+            writeHeaders(outputStream);
             outputStream.writeBytes(responseBody);
         } catch (HttpInternalServerErrorException | IOException ex) {
             System.err.println(ex.getMessage());
         }
     }
 
-    private void writeHeaders(DataOutputStream outputStream, HashMap<String, Object> headers)
-            throws HttpInternalServerErrorException {
+    private boolean isImage() {
+        return parseContentType(resource.getName()).startsWith("image");
+    }
+
+    private byte[] readFile(File file) throws HttpInternalServerErrorException {
+        try (FileInputStream fis = new FileInputStream(file)) {
+            byte[] bFile = new byte[(int) file.length()];
+            // read until the end of the stream.
+            while (fis.available() != 0) {
+                fis.read(bFile, 0, bFile.length);
+            }
+            return bFile;
+        } catch (IOException e) {
+            throw new HttpInternalServerErrorException("Something went wrong while fetching the resource.");
+        }
+    }
+
+    private boolean chunkResponseRequired() {
+        Object headerValue = request.getHeaders().get("chunked");
+        return (headerValue instanceof String) && (headerValue.toString().equalsIgnoreCase("yes"));
+    }
+
+    private void writeHeaders(DataOutputStream outputStream) throws HttpInternalServerErrorException {
         try {
-            outputStream.writeBytes(prettyPrintHeaders(headers));
+            outputStream.writeBytes(prettyPrintHeaders(responseHeaders));
         } catch (IOException e) {
             throw new HttpInternalServerErrorException();
         }
@@ -185,9 +204,9 @@ public class HttpResponse extends HttpMessage {
         ProtocolVersion requestHttpVersion = request.getHttpVersion();
         if (!requestHttpVersion.protocol.equals("HTTP"))
             throw new HttpBadRequestException();
-        switch ((requestHttpVersion.compareToVersion(WebServer.DEFAULT_HTTP_VERSION.value()))) {
+        switch ((requestHttpVersion.compareToVersion(EHttpVersions.HTTP_1_1.value()))) {
             case 1:
-                return WebServer.DEFAULT_HTTP_VERSION.value();
+                return EHttpVersions.HTTP_1_1.value();
             case 0:
                 break;
             case -1:
@@ -198,24 +217,70 @@ public class HttpResponse extends HttpMessage {
         return requestHttpVersion;
     }
 
-    private File parseResourcePath(String requestedResource) throws HttpNotFoundException {
-        String path;
+    private File parseResource(String requestedResource) throws HttpNotFoundException {
         if (requestedResource.equals("/"))
-            requestedResource =  serverDefaultPage;
+            requestedResource = serverDefaultPage;
 
         if (requestedResource.startsWith("/"))
             requestedResource = requestedResource.substring(1);
 
-        path = serverRootFolder + requestedResource;
+        String path = serverRootFolder + requestedResource;
         File resourceFile = new File(path);
 
-        if (Files.notExists(resourceFile.toPath()))
-            throw new HttpNotFoundException();
+        if (Files.notExists(resourceFile.toPath())) {
+            if (path.endsWith("params_info.html")) {
+                setupParamsInfoResponseBody();
+            } else {
+                throw new HttpNotFoundException();
+            }
+        }
 
         // Update the Content-Type header.
         this.responseHeaders.put("Content-Type", parseContentType(path));
 
         return resourceFile;
+    }
+
+    private void setupParamsInfoResponseBody() {
+        HashMap<String, String> params = request.getRequestLine().getQueryStringParameters();
+        StringBuilder stringBuilder = new StringBuilder();
+        String head =
+                "<!DOCTYPE html>\n" +
+                "<html>\n" +
+                "   <head>\n" +
+                "   <style>\n" +
+                "   table, th, td {\n" +
+                "       border: 1px solid black;\n" +
+                "       border-collapse: collapse;\n" +
+                "   }\n" +
+                "   th, td {\n" +
+                "       padding: 5px;\n" +
+                "       text-align: center;\n" +
+                "   }\n" +
+                "   </style>\n" +
+                "   </head>\n";
+        stringBuilder.append(head);
+        String body =
+                "<body>\n" +
+                "<table style=\"width:100%\">\n" +
+                "  <tr><th>Name</th><th>Value</th></tr>\n";
+        stringBuilder.append(body);
+        for (Map.Entry<String, String> entry : params.entrySet()) {
+            String value = entry.getValue();
+            try {
+                value = URLDecoder.decode(value, "UTF-8");
+            } catch (UnsupportedEncodingException e) {
+                System.err.println(e.getMessage());
+            }
+            String line = String.format("  <tr><td>%s</td><td>%s</td></tr>%n", entry.getKey(), value);
+            stringBuilder.append(line);
+        }
+        stringBuilder.append(
+                "</table>\n" +
+                "</body>\n" +
+                "</html>\n"
+        );
+        responseBody = stringBuilder.toString();
     }
 
     private String parseContentType(String fileName) {
@@ -224,12 +289,12 @@ public class HttpResponse extends HttpMessage {
         } else if (fileName.endsWith(".bmp")) {
             return "image/bmp";
         } else if (fileName.endsWith(".gif")) {
-            return  "image/gif";
+            return "image/gif";
         } else if (fileName.endsWith(".png")) {
-            return  "image/png";
+            return "image/png";
         } else if (fileName.endsWith(".jpg")) {
             return "image/jpg";
-        } else if (fileName.endsWith(".ico")){
+        } else if (fileName.endsWith(".ico")) {
             return "image/x-icon";
         } else {
             return "application/octet-stream";

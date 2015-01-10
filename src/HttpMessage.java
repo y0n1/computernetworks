@@ -1,7 +1,6 @@
 import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.Map;
-import java.util.SortedMap;
 
 /**
  * Created by Yoni on 3/1/2015.
@@ -16,16 +15,11 @@ public abstract class HttpMessage {
 
         String httpMessageClassName = httpMessageClass.toString().substring(10).toUpperCase();
         String output = null;
-        if (startLine == null) {
-            output = "----%1$s-N/A--------------------------------------------------------------";
-        }
-
         if (body == null || body.isEmpty()) {
             output =
                     "----BEGIN-OF--%1$s-------------------------------------------------------------" + CRLF +
                     "%2$s" + CRLF +
                     "%3$s" +
-                    CRLF +
                     "-----END--OF--%1$s-------------------------------------------------------------" + CRLF;
             output = String.format(output, httpMessageClassName, startLine, prettyPrintHeaders(headers));
         } else if (!body.isEmpty()) {
@@ -33,8 +27,7 @@ public abstract class HttpMessage {
                     "----BEGIN-OF--%1$s-------------------------------------------------------------" + CRLF +
                     "%2$s" + CRLF +
                     "%3$s" +
-                    CRLF +
-                    "%4$s" +
+                    "%4$s" + CRLF +
                     "-----END--OF--%1$s-------------------------------------------------------------" + CRLF;
             output = String.format(output, httpMessageClassName, startLine, prettyPrintHeaders(headers), body);
         }
@@ -50,13 +43,13 @@ public abstract class HttpMessage {
                 String value = null;
                 if (header.getValue() instanceof Hashtable) {
                     value = new CookieParser((Hashtable<String, String>) header.getValue()).toString();
-                } else if (header.getValue() instanceof String) {
-                    value = ((String) header.getValue()).trim();
+                } else {
+                    value = String.valueOf(header.getValue()).trim();
                 }
                 String headerLine = String.format("%1$s: %2$s", key, value);
                 sb.append(headerLine + CRLF);
             }
         }
-        return sb.toString();
+        return sb.toString() + CRLF;
     }
 }
