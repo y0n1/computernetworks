@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Computer Networks</title>
+    <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
+  </head>
+  <body background="background.jpg">
+    <font size="11" face="calibri" color="blue">
+      <marquee width="100%" behavior="alternate">Computer Networks 2014/2015</marquee>
+    </font>
+    <h2 style="display:table;margin:0 auto;">
+      <span style="color:red">Jonathan Kilzi</span>
+    </h2>
+    <table style="display:table;margin:0 auto;">
+      <tr>
+        <td>Show me the images:</td>
+        <td>
+          <a href="#images">Jump to the images</a>
+        </td>
+      </tr>
+      <tr>
+        <td>Show me website I like:</td>
+        <td>
+          <a href="#website">Jump to the website I like</a>
+        </td>
+      </tr>
+      <tr>
+        <td>Show me the forms:</td>
+        <td>
+          <a href="#forms">Jump to the forms</a>
+        </td>
+      </tr>
+      <tr>
+        <td>Contact Me:</td>
+        <td>
+          <a href="mailto:kilzi.jonathan@post.idc.ac.il">Send me an email</a>
+        </td>
+      </tr>
+    </table>
+    <hr />
+    <div id="images" style="display:table;margin:0 auto;">
+    <img align="middle"
+    src="http://img1.wikia.nocookie.net/__cb20130422075133/doratheexplorer/images/thumb/1/10/3.png/200px-3.png" /> 
+    <img align="middle" src="http://img4.wikia.nocookie.net/__cb20131219004113/doratheexplorer/images/e/e1/Boots3.png" /> 
+    <img align="middle"
+    src="http://img3.wikia.nocookie.net/__cb20131112051006/doratheexplorer/images/thumb/b/b9/Diego5.png/300px-Diego5.png" /></div>
+    <hr />
+    <iframe id="website" src="http://www.wikipedia.com/" frameborder="0" scrolling="auto" style="width:100%; height:300px;"></iframe>
+    <hr />
+    <div id="forms">
+      <form action="http://localhost:9876/GetTest.html" method="get" id="form1">
+        <textarea name="form1_Textarea" style="width:100px; height:100px; resize:none;"></textarea>
+        <br />
+        <input type="submit" value="Submit with GET" />
+      </form>
+      <br />
+      <form action="http://localhost:9876/PostTest.html" method="post" id="form2">
+        <select name="form2_Dropdown">
+          <option value="1">Klum</option>
+          <option value="2">Nothing</option>
+          <option value="3">Nada</option>
+        </select>
+        <br />
+        <input type="submit" value="Submit with POST" />
+      </form>
+      <form action="http://localhost:8080/params_info.html" method="post" id="form3">
+      <textarea name="form3_Textarea" style="width:120px; height:30px; resize:none;"></textarea> 
+      <input type="checkbox" name="form3_Checkbox" value="selected" />
+      <br />
+      <input type="submit" value="Submit" /></form>
+    </div>
+  </body>
+</html>
